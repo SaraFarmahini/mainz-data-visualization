@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 import numpy as np
 import os
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -23,6 +24,19 @@ station_coords = {
     'Oberstadt': [49.9833, 8.2667],
     'Weisenau': [49.9667, 8.2833]
 }
+
+def get_base_station_name(filename):
+    """Extract base station name from filename, handling numbered stations"""
+    # Remove 'monthly_means_' prefix and '.csv' suffix
+    name = filename.replace('monthly_means_', '').replace('.csv', '')
+    
+    # Extract base name and number if present
+    match = re.match(r'([A-Za-z]+)(?:_(\d+))?(?:_ooo)?', name)
+    if match:
+        base_name = match.group(1)
+        number = match.group(2)
+        return base_name, number
+    return name, None
 
 # Load the data
 @st.cache_data
@@ -72,25 +86,41 @@ def load_data():
         noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
         noise_files = [f for f in noise_files if 'weather' not in f]
         
-        noise_data = pd.DataFrame()
+        # Create a dictionary to store DataFrames by base station name
+        station_data_dict = {}
+        
         for file in noise_files:
             try:
                 df = pd.read_csv(file)
-                # Extract base station name (remove any suffixes)
-                station_name = os.path.basename(file).replace('monthly_means_', '').replace('.csv', '')
-                base_station = station_name.split('_')[0]  # Get the base station name
+                base_station, number = get_base_station_name(os.path.basename(file))
                 
                 if base_station in station_coords:
                     df['station_name'] = base_station
+                    df['station_number'] = number
                     df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
                     df['latitude'] = station_coords[base_station][0]
                     df['longitude'] = station_coords[base_station][1]
-                    noise_data = pd.concat([noise_data, df], ignore_index=True)
+                    
+                    if base_station not in station_data_dict:
+                        station_data_dict[base_station] = []
+                    station_data_dict[base_station].append(df)
                 else:
                     logging.warning(f"Skipping unknown station: {base_station}")
             except Exception as e:
                 logging.error(f"Error processing file {file}: {str(e)}")
                 continue
+        
+        # Combine data for stations with multiple measurements
+        noise_data = pd.DataFrame()
+        for base_station, dfs in station_data_dict.items():
+            if len(dfs) > 1:
+                # Multiple measurements exist, calculate mean
+                combined_df = pd.concat(dfs)
+                mean_df = combined_df.groupby(['month_year', 'date', 'station_name', 'latitude', 'longitude'])['db_a'].mean().reset_index()
+                noise_data = pd.concat([noise_data, mean_df], ignore_index=True)
+            else:
+                # Only one measurement exists, use it directly
+                noise_data = pd.concat([noise_data, dfs[0]], ignore_index=True)
         
         logging.info("Data loading completed successfully")
         return stations, weather, patients, noise_data
