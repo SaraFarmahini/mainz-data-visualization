@@ -139,7 +139,7 @@ def filter_data_by_date(data, selected_date, frequency):
         return data[data['date'].dt.year == selected_date.year]
 
 # Function to create a heatmap
-def create_heatmap(data, data_type, frequency, selected_date):
+def create_heatmap(data, data_type, frequency, selected_date, weather_data=None):
     try:
         logging.info(f"Creating heatmap for {data_type} with {frequency} frequency for date {selected_date}")
         
@@ -153,12 +153,22 @@ def create_heatmap(data, data_type, frequency, selected_date):
             st.warning(f"No data available for {selected_date.strftime('%B %Y' if frequency == 'Monthly' else '%Y')}")
             return m
         
+        # Calculate and display mean temperature if weather data is provided
+        if weather_data is not None:
+            filtered_weather = filter_data_by_date(weather_data, selected_date, frequency)
+            if not filtered_weather.empty:
+                mean_temp = filtered_weather['TT_10'].mean()
+                temp_html = f"""
+                    <div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; background-color: white; 
+                    padding: 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2);">
+                        <b>Mean Temperature: {mean_temp:.1f}°C</b>
+                    </div>
+                """
+                m.get_root().html.add_child(folium.Element(temp_html))
+        
         # Add markers for each station
         for idx, row in filtered_data.drop_duplicates('station_name').iterrows():
-            if data_type == 'Weather':
-                value = row['TT_10']
-                unit = '°C'
-            elif data_type == 'Patients':
+            if data_type == 'Patients':
                 value = row['patient_count']
                 unit = 'patients'
             else:  # Aircraft Noise
@@ -174,16 +184,14 @@ def create_heatmap(data, data_type, frequency, selected_date):
         # Prepare data for heatmap with weights
         heat_data = []
         for _, row in filtered_data.iterrows():
-            if data_type == 'Weather':
-                value = row['TT_10']
-            elif data_type == 'Patients':
+            if data_type == 'Patients':
                 value = row['patient_count']
             else:  # Aircraft Noise
                 value = row['db_a']
             
             # Normalize the value for better visualization
-            min_val = filtered_data['TT_10'].min() if data_type == 'Weather' else filtered_data['patient_count'].min() if data_type == 'Patients' else filtered_data['db_a'].min()
-            max_val = filtered_data['TT_10'].max() if data_type == 'Weather' else filtered_data['patient_count'].max() if data_type == 'Patients' else filtered_data['db_a'].max()
+            min_val = filtered_data['patient_count'].min() if data_type == 'Patients' else filtered_data['db_a'].min()
+            max_val = filtered_data['patient_count'].max() if data_type == 'Patients' else filtered_data['db_a'].max()
             normalized_value = (value - min_val) / (max_val - min_val) if max_val != min_val else 0.5
             
             heat_data.append([row['latitude'], row['longitude'], normalized_value])
@@ -210,7 +218,7 @@ def main():
         
         # Sidebar for options
         st.sidebar.header('Options')
-        data_type = st.sidebar.selectbox('Select Data Type', ['Weather', 'Aircraft Noise', 'Patients'])
+        data_type = st.sidebar.selectbox('Select Data Type', ['Aircraft Noise', 'Patients'])
         frequency = st.sidebar.selectbox('Select Frequency', ['Annual', 'Monthly'])
         
         # Date selection based on frequency
@@ -223,15 +231,13 @@ def main():
             selected_date = datetime(year, 1, 1)
         
         # Filter data based on selection
-        if data_type == 'Weather':
-            data = stations
-        elif data_type == 'Aircraft Noise':
+        if data_type == 'Aircraft Noise':
             data = noise_data
         else:
             data = patients
         
         # Create heatmap
-        heatmap = create_heatmap(data, data_type, frequency, selected_date)
+        heatmap = create_heatmap(data, data_type, frequency, selected_date, weather)
         
         # Display the map
         folium_static(heatmap)
