@@ -56,17 +56,6 @@ def load_data():
         weather = pd.read_csv(weather_path)
         weather['date'] = pd.to_datetime(weather['month_year'], format='%B %Y')
         
-        # Create a DataFrame for all stations with weather data
-        stations = pd.DataFrame()
-        
-        # For each station, create a copy of the weather data
-        for station_name, coords in station_coords.items():
-            station_data = weather.copy()
-            station_data['station_name'] = station_name
-            station_data['latitude'] = coords[0]
-            station_data['longitude'] = coords[1]
-            stations = pd.concat([stations, station_data], ignore_index=True)
-        
         # Load patient data
         logging.info("Loading patient data...")
         patients_path = os.path.join(data_dir, 'monthly_patients_by_station.csv')
@@ -122,7 +111,7 @@ def load_data():
                 noise_data = pd.concat([noise_data, dfs[0]], ignore_index=True)
         
         logging.info("Data loading completed successfully")
-        return stations, weather, patients, noise_data
+        return None, weather, patients, noise_data
     except Exception as e:
         logging.error(f"Error loading data: {str(e)}")
         st.error(f"Error loading data: {str(e)}")
@@ -210,9 +199,9 @@ def main():
         st.title('Station Data Visualization')
         
         # Load data
-        stations, weather, patients, noise_data = load_data()
+        _, weather, patients, noise_data = load_data()
         
-        if stations is None or weather is None or patients is None or noise_data is None:
+        if weather is None or patients is None or noise_data is None:
             st.error("Failed to load data. Please check the logs for more details.")
             return
         
@@ -233,7 +222,7 @@ def main():
         # Filter data based on selection
         if data_type == 'Aircraft Noise':
             data = noise_data
-        else:
+        else:  # Patients
             data = patients
         
         # Create heatmap
