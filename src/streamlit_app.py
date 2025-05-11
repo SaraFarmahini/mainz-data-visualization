@@ -16,8 +16,7 @@ logging.basicConfig(level=logging.DEBUG)
 # Define station coordinates directly (temporary solution)
 station_coords = {
     'Bretzenheim': [49.9833, 8.2667],
-    'Finthen': [49.9833, 8.2333],
-    'Gonsenheim': [49.9833, 8.2667],
+    'Ebersheim': [49.9333, 8.2333],
     'Hechtsheim': [49.9833, 8.2667],
     'Laubenheim': [49.9667, 8.2833],
     'Lerchenberg': [49.9833, 8.2333],
