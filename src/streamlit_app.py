@@ -69,6 +69,12 @@ def load_data():
         patients['latitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[0])
         patients['longitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[1])
         
+        # Log the number of patient records with missing coordinates
+        missing_coords = patients[patients['latitude'].isna() | patients['longitude'].isna()]
+        if not missing_coords.empty:
+            logging.warning(f"Found {len(missing_coords)} patient records with missing coordinates")
+            logging.warning(f"Stations with missing coordinates: {missing_coords['station_name'].unique()}")
+        
         # Load aircraft noise data
         logging.info("Loading aircraft noise data...")
         noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
@@ -140,6 +146,13 @@ def create_heatmap(data, data_type, frequency, selected_date, weather_data=None)
         
         if filtered_data.empty:
             st.warning(f"No data available for {selected_date.strftime('%B %Y' if frequency == 'Monthly' else '%Y')}")
+            return m
+        
+        # Remove rows with missing coordinates
+        filtered_data = filtered_data.dropna(subset=['latitude', 'longitude'])
+        
+        if filtered_data.empty:
+            st.warning("No valid location data available for the selected period.")
             return m
         
         # Calculate and display mean temperature if weather data is provided
