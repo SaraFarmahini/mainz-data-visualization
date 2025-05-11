@@ -7,6 +7,7 @@ import glob
 import logging
 from datetime import datetime
 import numpy as np
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -29,9 +30,17 @@ def load_data():
     try:
         logging.info("Starting to load data...")
         
+        # Get the current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Get the project root directory (one level up from src)
+        project_root = os.path.dirname(current_dir)
+        # Construct the data directory path
+        data_dir = os.path.join(project_root, 'data')
+        
         # Load weather data first
         logging.info("Loading weather data...")
-        weather = pd.read_csv('monthly_means_weather.csv')
+        weather_path = os.path.join(data_dir, 'monthly_means_weather.csv')
+        weather = pd.read_csv(weather_path)
         weather['date'] = pd.to_datetime(weather['month_year'], format='%B %Y')
         
         # Create a DataFrame for all stations with weather data
@@ -47,7 +56,8 @@ def load_data():
         
         # Load patient data
         logging.info("Loading patient data...")
-        patients = pd.read_csv('monthly_patients_by_station.csv')
+        patients_path = os.path.join(data_dir, 'monthly_patients_by_station.csv')
+        patients = pd.read_csv(patients_path)
         patients['date'] = pd.to_datetime(patients['month_year'], format='%B %Y')
         
         # Extract station name from closest_station (remove 'Mainz/' prefix)
@@ -59,15 +69,15 @@ def load_data():
         
         # Load aircraft noise data
         logging.info("Loading aircraft noise data...")
-        noise_files = glob.glob('monthly_means_*.csv')
-        noise_files = [f for f in noise_files if f != 'monthly_means_weather.csv']
+        noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
+        noise_files = [f for f in noise_files if 'weather' not in f]
         
         noise_data = pd.DataFrame()
         for file in noise_files:
             try:
                 df = pd.read_csv(file)
                 # Extract base station name (remove any suffixes)
-                station_name = file.replace('monthly_means_', '').replace('.csv', '')
+                station_name = os.path.basename(file).replace('monthly_means_', '').replace('.csv', '')
                 base_station = station_name.split('_')[0]  # Get the base station name
                 
                 if base_station in station_coords:
