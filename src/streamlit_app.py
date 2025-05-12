@@ -9,19 +9,29 @@ from datetime import datetime
 import numpy as np
 import os
 import re
+from folium.plugins import HeatMap
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Define station coordinates directly (temporary solution)
+# Set page config
+st.set_page_config(page_title="Mainz Data Visualization", layout="wide")
+
+# Define station coordinates
 station_coords = {
-    'Bretzenheim': [49.9833, 8.2667],
-    'Ebersheim': [49.9333, 8.2333],
-    'Hechtsheim': [49.9833, 8.2667],
-    'Laubenheim': [49.9667, 8.2833],
-    'Lerchenberg': [49.9833, 8.2333],
-    'Oberstadt': [49.9833, 8.2667],
-    'Weisenau': [49.9667, 8.2833]
+    'Ebersheim': (49.9275, 8.3458),
+    'Finthen': (49.9733, 8.1750),
+    'Gonsenheim': (49.9833, 8.2167),
+    'Hartenberg': (49.9833, 8.2667),
+    'Hechtsheim': (49.9667, 8.2500),
+    'Laubenheim': (49.9333, 8.3000),
+    'Lerchenberg': (49.9833, 8.2333),
+    'Marienborn': (49.9667, 8.2167),
+    'Mombach': (49.9833, 8.2167),
+    'Neustadt': (49.9833, 8.2667),
+    'Oberstadt': (49.9833, 8.2667),
+    'Weisenau': (49.9667, 8.2833),
+    'Bretzenheim': (49.9833, 8.2333)
 }
 
 def get_base_station_name(filename):
@@ -37,7 +47,7 @@ def get_base_station_name(filename):
         return base_name, number
     return name, None
 
-# Load the data
+# Function to load data
 @st.cache_data
 def load_data():
     try:
