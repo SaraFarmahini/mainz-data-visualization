@@ -180,7 +180,7 @@ def create_heatmap(data, data_type, frequency, selected_date, weather_data=None)
         
         # Add markers for each station
         for idx, row in filtered_data.drop_duplicates('station_name').iterrows():
-            if data_type == 'Patients':
+            if data_type == 'Patients Number':
                 value = row['patient_count']
                 unit = 'patients'
             else:  # Aircraft Noise
@@ -196,14 +196,14 @@ def create_heatmap(data, data_type, frequency, selected_date, weather_data=None)
         # Prepare data for heatmap with weights
         heat_data = []
         for _, row in filtered_data.iterrows():
-            if data_type == 'Patients':
+            if data_type == 'Patients Number':
                 value = row['patient_count']
             else:  # Aircraft Noise
                 value = row['db_a']
             
             # Normalize the value for better visualization
-            min_val = filtered_data['patient_count'].min() if data_type == 'Patients' else filtered_data['db_a'].min()
-            max_val = filtered_data['patient_count'].max() if data_type == 'Patients' else filtered_data['db_a'].max()
+            min_val = filtered_data['patient_count'].min() if data_type == 'Patients Number' else filtered_data['db_a'].min()
+            max_val = filtered_data['patient_count'].max() if data_type == 'Patients Number' else filtered_data['db_a'].max()
             normalized_value = (value - min_val) / (max_val - min_val) if max_val != min_val else 0.5
             
             heat_data.append([row['latitude'], row['longitude'], normalized_value])
@@ -230,7 +230,7 @@ def main():
         
         # Sidebar for options
         st.sidebar.header('Options')
-        data_type = st.sidebar.selectbox('Select Data Type', ['Aircraft Noise', 'Patients'])
+        data_type = st.sidebar.selectbox('Select Data Type', ['Aircraft Noise', 'Patients Number'])
         frequency = st.sidebar.selectbox('Select Frequency', ['Annual', 'Monthly'])
         
         # Date selection based on frequency
