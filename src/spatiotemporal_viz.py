@@ -83,10 +83,10 @@ def create_visualization(selected_date, patients, noise_data):
         attr='CartoDB'
     )
 
-    # Add custom tile layer for better visualization
+    # Remove the dark map layer and use standard light style
     folium.TileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        name='Dark Map',
+        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        name='Light Map',
         attr='CartoDB'
     ).add_to(m)
 
