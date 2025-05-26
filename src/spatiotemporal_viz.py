@@ -34,36 +34,49 @@ station_coords = {
     'Bretzenheim': (49.9833, 8.2333)
 }
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_data():
-    # Get the current directory (src) and go up one level to find the data directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(current_dir), 'data')
-    
-    weather = pd.read_csv(os.path.join(data_dir, 'monthly_means_weather.csv'))
-    weather['date'] = pd.to_datetime(weather['month_year'], format='%B %Y')
+    try:
+        # Get the current directory (src) and go up one level to find the data directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(os.path.dirname(current_dir), 'data')
+        
+        # Load weather data
+        weather = pd.read_csv(os.path.join(data_dir, 'monthly_means_weather.csv'))
+        weather['date'] = pd.to_datetime(weather['month_year'], format='%B %Y')
 
-    patients = pd.read_csv(os.path.join(data_dir, 'monthly_patients_by_station.csv'))
-    patients['date'] = pd.to_datetime(patients['month_year'], format='%B %Y')
-    patients['station_name'] = patients['closest_station'].str.replace('Mainz/', '')
-    patients['latitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[0])
-    patients['longitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[1])
+        # Load patient data
+        patients = pd.read_csv(os.path.join(data_dir, 'monthly_patients_by_station.csv'))
+        patients['date'] = pd.to_datetime(patients['month_year'], format='%B %Y')
+        patients['station_name'] = patients['closest_station'].str.replace('Mainz/', '')
+        patients['latitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[0])
+        patients['longitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[1])
 
-    noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
-    noise_files = [f for f in noise_files if 'weather' not in f]
-    noise_dfs = []
-    for f in noise_files:
-        base_name = re.sub(r'monthly_means_|\.csv', '', os.path.basename(f))
-        base_name = re.sub(r'_\d+|_ooo', '', base_name)
-        if base_name in station_coords:
-            df = pd.read_csv(f)
-            df['station_name'] = base_name
-            df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
-            df['latitude'], df['longitude'] = station_coords[base_name]
-            noise_dfs.append(df)
-    noise_data = pd.concat(noise_dfs)
-
-    return weather, patients, noise_data
+        # Load noise data more efficiently
+        noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
+        noise_files = [f for f in noise_files if 'weather' not in f]
+        
+        noise_dfs = []
+        for f in noise_files:
+            try:
+                base_name = re.sub(r'monthly_means_|\.csv', '', os.path.basename(f))
+                base_name = re.sub(r'_\d+|_ooo', '', base_name)
+                if base_name in station_coords:
+                    df = pd.read_csv(f)
+                    df['station_name'] = base_name
+                    df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
+                    df['latitude'], df['longitude'] = station_coords[base_name]
+                    noise_dfs.append(df)
+            except Exception as e:
+                st.warning(f"Error loading file {f}: {str(e)}")
+                continue
+                
+        noise_data = pd.concat(noise_dfs) if noise_dfs else pd.DataFrame()
+        
+        return weather, patients, noise_data
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return None, None, None
 
 def create_visualization(selected_date, patients, noise_data):
     # Filter data for selected date
