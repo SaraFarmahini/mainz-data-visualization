@@ -1,31 +1,38 @@
 # Mainz Data Visualization
 
-This project visualizes various data types (weather, aircraft noise, and patient data) for different stations in Mainz, Germany.
+This Streamlit application visualizes the relationship between aircraft noise levels and patient data across different stations in Mainz, Germany.
 
-## Data Description
+## Features
 
-The project uses three types of data:
-1. Weather data (monthly means)
-2. Aircraft noise data (monthly means)
-3. Patient data (monthly counts by station)
+- Interactive map showing patient counts and noise levels
+- Time-based visualization with monthly data
+- Heatmap representation of noise levels
+- Circle markers for patient counts
+- Detailed station-wise breakdown
+- Comprehensive data summary
 
-## Setup Instructions
+## Data Structure
 
-1. Clone the repository:
-```bash
-git clone <your-repository-url>
-cd <repository-name>
-```
+The application uses the following data files:
+- `monthly_means_weather.csv`: Weather data
+- `monthly_patients_by_station.csv`: Patient data by station
+- `monthly_means_*.csv`: Aircraft noise data for different stations
 
-2. Install required packages:
+## Setup
+
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Run the Streamlit app:
+2. Run the application:
 ```bash
-streamlit run streamlit_app.py
+streamlit run src/spatiotemporal_viz.py
 ```
+
+## Deployment
+
+This application is deployed on Streamlit Community Cloud. You can access it at: [Your Streamlit URL will appear here after deployment]
 
 ## Project Structure
 
