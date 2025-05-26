@@ -12,221 +12,248 @@ import re
 from folium.plugins import HeatMap
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)  # Changed to INFO to reduce logging
 
-# Set page config
-st.set_page_config(page_title="Mainz Data Visualization", layout="wide")
+# Set page config with optimized settings
+st.set_page_config(
+    page_title="Mainz Data Visualization",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # Start with collapsed sidebar
+)
 
-# Define station coordinates
-station_coords = {
-    'Ebersheim': (49.9275, 8.3458),
-    'Finthen': (49.9733, 8.1750),
-    'Gonsenheim': (49.9833, 8.2167),
-    'Hartenberg': (49.9833, 8.2667),
-    'Hechtsheim': (49.9667, 8.2500),
-    'Laubenheim': (49.9333, 8.3000),
-    'Lerchenberg': (49.9833, 8.2333),
-    'Marienborn': (49.9667, 8.2167),
-    'Mombach': (49.9833, 8.2167),
-    'Neustadt': (49.9833, 8.2667),
-    'Oberstadt': (49.9833, 8.2667),
-    'Weisenau': (49.9667, 8.2833),
-    'Bretzenheim': (49.9833, 8.2333)
-}
-
+# Cache station coordinates
 @st.cache_data
+def get_station_coords():
+    return {
+        'Ebersheim': (49.9275, 8.3458),
+        'Finthen': (49.9733, 8.1750),
+        'Gonsenheim': (49.9833, 8.2167),
+        'Hartenberg': (49.9833, 8.2667),
+        'Hechtsheim': (49.9667, 8.2500),
+        'Laubenheim': (49.9333, 8.3000),
+        'Lerchenberg': (49.9833, 8.2333),
+        'Marienborn': (49.9667, 8.2167),
+        'Mombach': (49.9833, 8.2167),
+        'Neustadt': (49.9833, 8.2667),
+        'Oberstadt': (49.9833, 8.2667),
+        'Weisenau': (49.9667, 8.2833),
+        'Bretzenheim': (49.9833, 8.2333)
+    }
+
+station_coords = get_station_coords()
+
+# Optimize data loading with better caching
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
-    # Get the current directory (src) and go up one level to find the data directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(current_dir), 'data')
-    
-    weather = pd.read_csv(os.path.join(data_dir, 'monthly_means_weather.csv'))
-    weather['date'] = pd.to_datetime(weather['month_year'], format='%B %Y')
-
-    patients = pd.read_csv(os.path.join(data_dir, 'monthly_patients_by_station.csv'))
-    patients['date'] = pd.to_datetime(patients['month_year'], format='%B %Y')
-    patients['station_name'] = patients['closest_station'].str.replace('Mainz/', '')
-    patients['latitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[0])
-    patients['longitude'] = patients['station_name'].map(lambda x: station_coords.get(x, [None, None])[1])
-
-    noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
-    noise_files = [f for f in noise_files if 'weather' not in f]
-    noise_dfs = []
-    for f in noise_files:
-        base_name = re.sub(r'monthly_means_|\.csv', '', os.path.basename(f))
-        base_name = re.sub(r'_\d+|_ooo', '', base_name)
-        if base_name in station_coords:
-            df = pd.read_csv(f)
-            df['station_name'] = base_name
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(os.path.dirname(current_dir), 'data')
+        
+        # Load and process data in parallel using st.cache_data
+        @st.cache_data(ttl=3600)
+        def load_weather():
+            df = pd.read_csv(os.path.join(data_dir, 'monthly_means_weather.csv'))
             df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
-            df['latitude'], df['longitude'] = station_coords[base_name]
-            noise_dfs.append(df)
-    noise_data = pd.concat(noise_dfs)
+            return df
 
-    return weather, patients, noise_data
+        @st.cache_data(ttl=3600)
+        def load_patients():
+            df = pd.read_csv(os.path.join(data_dir, 'monthly_patients_by_station.csv'))
+            df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
+            df['station_name'] = df['closest_station'].str.replace('Mainz/', '')
+            df['latitude'] = df['station_name'].map(lambda x: station_coords.get(x, [None, None])[0])
+            df['longitude'] = df['station_name'].map(lambda x: station_coords.get(x, [None, None])[1])
+            return df
 
+        @st.cache_data(ttl=3600)
+        def load_noise():
+            noise_files = glob.glob(os.path.join(data_dir, 'monthly_means_*.csv'))
+            noise_files = [f for f in noise_files if 'weather' not in f]
+            
+            noise_dfs = []
+            for f in noise_files:
+                try:
+                    base_name = re.sub(r'monthly_means_|\.csv', '', os.path.basename(f))
+                    base_name = re.sub(r'_\d+|_ooo', '', base_name)
+                    if base_name in station_coords:
+                        df = pd.read_csv(f)
+                        df['station_name'] = base_name
+                        df['date'] = pd.to_datetime(df['month_year'], format='%B %Y')
+                        df['latitude'], df['longitude'] = station_coords[base_name]
+                        noise_dfs.append(df)
+                except Exception as e:
+                    logging.warning(f"Error loading file {f}: {str(e)}")
+                    continue
+            
+            return pd.concat(noise_dfs) if noise_dfs else pd.DataFrame()
+
+        # Load all data
+        weather = load_weather()
+        patients = load_patients()
+        noise_data = load_noise()
+        
+        return weather, patients, noise_data
+    except Exception as e:
+        logging.error(f"Error loading data: {str(e)}")
+        return None, None, None
+
+# Cache the visualization creation
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def create_visualization(selected_date, patients, noise_data):
-    # Filter data for selected date
-    filtered_patients = patients[patients['date'].dt.strftime('%Y-%m') == selected_date.strftime('%Y-%m')].dropna(subset=['latitude', 'longitude'])
-    filtered_noise = noise_data[noise_data['date'].dt.strftime('%Y-%m') == selected_date.strftime('%Y-%m')].dropna(subset=['latitude', 'longitude'])
+    try:
+        # Filter data for selected date
+        filtered_patients = patients[patients['date'].dt.strftime('%Y-%m') == selected_date.strftime('%Y-%m')].dropna(subset=['latitude', 'longitude'])
+        filtered_noise = noise_data[noise_data['date'].dt.strftime('%Y-%m') == selected_date.strftime('%Y-%m')].dropna(subset=['latitude', 'longitude'])
 
-    # Debug information
-    st.write(f"Selected date: {selected_date.strftime('%B %Y')}")
-    st.write(f"Number of patient records: {len(filtered_patients)}")
-    st.write(f"Number of noise records: {len(filtered_noise)}")
+        # Create map with optimized settings
+        m = folium.Map(
+            location=[49.9929, 8.2473],
+            zoom_start=11,
+            tiles='CartoDB positron',
+            attr='CartoDB',
+            prefer_canvas=True  # Better performance
+        )
 
-    # Create map with custom style
-    m = folium.Map(
-        location=[49.9929, 8.2473],
-        zoom_start=11,
-        tiles='CartoDB positron',
-        attr='CartoDB'
-    )
+        if not filtered_patients.empty:
+            # Calculate min and max patient counts for scaling
+            min_patients = filtered_patients['patient_count'].min()
+            max_patients = filtered_patients['patient_count'].max()
 
-    # Remove the dark map layer and use standard light style
-    folium.TileLayer(
-        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        name='Light Map',
-        attr='CartoDB'
-    ).add_to(m)
+            # Add patient circles with optimized settings
+            for _, row in filtered_patients.iterrows():
+                normalized_count = (row['patient_count'] - min_patients) / (max_patients - min_patients + 1e-5)
+                radius = 5 + (15 * normalized_count)  # Simplified radius calculation
+                
+                folium.CircleMarker(
+                    location=[row['latitude'], row['longitude']],
+                    radius=radius,
+                    popup=f"{row['station_name']}: {row['patient_count']} patients",
+                    color='#1E88E5',
+                    fill=True,
+                    fill_color='#1E88E5',
+                    fill_opacity=0.6,
+                    weight=2,
+                    name='Patients'
+                ).add_to(m)
 
-    if not filtered_patients.empty:
-        # Calculate min and max patient counts for scaling
-        min_patients = filtered_patients['patient_count'].min()
-        max_patients = filtered_patients['patient_count'].max()
-
-        # Add patient circles with enhanced styling
-        for _, row in filtered_patients.iterrows():
-            # Calculate circle radius based on patient count (scaled for visibility)
-            base_size = 5  # Minimum circle size
-            max_size = 20  # Maximum circle size
-            
-            # Normalize patient count between 0 and 1
-            normalized_count = (row['patient_count'] - min_patients) / (max_patients - min_patients + 1e-5)
-            
-            # Calculate radius using logarithmic scaling for better visualization
-            radius = base_size + (max_size - base_size) * np.log1p(normalized_count * 9) / np.log1p(9)
-            
-            # Create circle marker with enhanced styling
-            folium.CircleMarker(
-                location=[row['latitude'], row['longitude']],
-                radius=radius,
-                popup=f"{row['station_name']}: {row['patient_count']} patients",
-                color='#1E88E5',  # Material Design Blue
-                fill=True,
-                fill_color='#1E88E5',
-                fill_opacity=0.6,
-                weight=2,
-                name='Patients'
+        if not filtered_noise.empty:
+            # Optimize heatmap data
+            heat_data = filtered_noise[['latitude', 'longitude', 'db_a']].values.tolist()
+            HeatMap(
+                heat_data,
+                name='Noise',
+                gradient={
+                    0.4: '#FFA726',
+                    0.7: '#EF5350',
+                    1: '#B71C1C'
+                },
+                radius=15,
+                opacity=0.7,
+                blur=10,
+                max_zoom=1  # Limit zoom level for better performance
             ).add_to(m)
 
-    if not filtered_noise.empty:
-        # Normalize noise values for heatmap
-        filtered_noise['intensity'] = (filtered_noise['db_a'] - filtered_noise['db_a'].min()) / (filtered_noise['db_a'].max() - filtered_noise['db_a'].min() + 1e-5)
+        # Add layer control
+        folium.LayerControl(position='topright').add_to(m)
+
+        # Add legend
+        legend_html = '''
+        <div style="position: fixed; 
+                    bottom: 50px; right: 50px; width: 250px; height: 150px; 
+                    border:2px solid grey; z-index:9999; font-size:14px;
+                    background-color:white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.2);">
+            <p style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">Map Legend</p>
+            <p><span style="color: #1E88E5; font-size: 20px;">●</span> Patient Count (Circle Size)</p>
+            <p><span style="color: #EF5350; font-size: 20px;">●</span> Noise Level (Heatmap)</p>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">Click on circles to see exact values</p>
+        </div>
+        '''
+        m.get_root().html.add_child(folium.Element(legend_html))
+
+        return m, filtered_patients, filtered_noise
+    except Exception as e:
+        logging.error(f"Error creating visualization: {str(e)}")
+        return None, None, None
+
+# Main app code
+def main():
+    try:
+        st.title('Spatio-Temporal Visualization of Aircraft Noise and Patients')
         
-        # Add noise heatmap with enhanced styling
-        heat_noise = [[row['latitude'], row['longitude'], row['intensity']] for _, row in filtered_noise.iterrows()]
-        HeatMap(
-            heat_noise,
-            name='Noise',
-            gradient={
-                0.4: '#FFA726',  # Light Orange
-                0.7: '#EF5350',  # Red
-                1: '#B71C1C'     # Dark Red
-            },
-            radius=15,
-            opacity=0.7,
-            blur=10
-        ).add_to(m)
+        # Load data with progress indicator
+        with st.spinner('Loading data...'):
+            weather, patients, noise_data = load_data()
+        
+        if weather is None or patients is None or noise_data is None:
+            st.error("Failed to load data. Please try refreshing the page.")
+            return
 
-    # Add layer control with custom position
-    folium.LayerControl(position='topright').add_to(m)
+        # Get unique dates
+        all_dates = np.unique(patients['date'].dt.to_pydatetime())
+        min_date = all_dates[0]
+        max_date = all_dates[-1]
 
-    # Add enhanced legend
-    legend_html = '''
-    <div style="position: fixed; 
-                bottom: 50px; right: 50px; width: 250px; height: 150px; 
-                border:2px solid grey; z-index:9999; font-size:14px;
-                background-color:white;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.2);">
-        <p style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">Map Legend</p>
-        <p><span style="color: #1E88E5; font-size: 20px;">●</span> Patient Count (Circle Size)</p>
-        <p><span style="color: #EF5350; font-size: 20px;">●</span> Noise Level (Heatmap)</p>
-        <p style="font-size: 12px; color: #666; margin-top: 10px;">Click on circles to see exact values</p>
-    </div>
-    '''
-    m.get_root().html.add_child(folium.Element(legend_html))
+        # Time slider with more descriptive format
+        selected_date = st.slider(
+            "Select Month and Year",
+            min_value=min_date,
+            max_value=max_date,
+            value=min_date,
+            format="MMMM YYYY"
+        )
 
-    return m, filtered_patients, filtered_noise
+        # Convert selected_date back to pandas Timestamp
+        selected_date = pd.Timestamp(selected_date)
 
-# Load data
-weather, patients, noise_data = load_data()
+        # Create visualization with progress indicator
+        with st.spinner('Creating visualization...'):
+            m, filtered_patients, filtered_noise = create_visualization(selected_date, patients, noise_data)
 
-st.title('Spatio-Temporal Visualization of Aircraft Noise and Patients')
+        if m is None:
+            st.error("Failed to create visualization. Please try refreshing the page.")
+            return
 
-# Get unique dates and convert to datetime objects
-all_dates = np.unique(patients['date'].dt.to_pydatetime())
-min_date = all_dates[0]
-max_date = all_dates[-1]
+        # Display the map
+        folium_static(m, width=1000, height=700)
 
-# Time slider with more descriptive format
-selected_date = st.slider(
-    "Select Month and Year",
-    min_value=min_date,
-    max_value=max_date,
-    value=min_date,
-    format="MMMM YYYY"  # Full month name and year
-)
+        # Add comprehensive guide
+        st.markdown("""
+        ### Visualization Guide
 
-# Convert selected_date back to pandas Timestamp for filtering
-selected_date = pd.Timestamp(selected_date)
+        #### Patient Data (Blue Circles)
+        - Each blue circle represents a measurement station
+        - The size of the circle indicates the number of patients
+        - Larger circles = more patients
+        - Click on any circle to see the exact patient count
 
-# Create visualization
-m, filtered_patients, filtered_noise = create_visualization(selected_date, patients, noise_data)
+        #### Noise Data (Red Heatmap)
+        - The red heatmap shows aircraft noise levels
+        - Color intensity indicates noise level:
+          - Light orange = lower noise
+          - Dark red = higher noise
+        - The noise values are in decibels (dB)
 
-# Display the map
-folium_static(m, width=1000, height=700)
+        #### How to Use
+        1. Use the slider above to select different months
+        2. Toggle layers using the control in the top-right of the map
+        3. Click on circles to see detailed information
+        4. Use the layer control to show/hide patient or noise data
+        """)
 
-# Add comprehensive guide
-st.markdown("""
-### Visualization Guide
+        # Add summary info
+        st.subheader(f"Summary for {selected_date.strftime('%B %Y')}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Mean Noise (dB)", f"{filtered_noise['db_a'].mean():.1f}")
+        with col2:
+            st.metric("Total Patients", f"{filtered_patients['patient_count'].sum()}")
 
-#### Patient Data (Blue Circles)
-- Each blue circle represents a measurement station
-- The size of the circle indicates the number of patients
-- Larger circles = more patients
-- Click on any circle to see the exact patient count
+    except Exception as e:
+        logging.error(f"Error in main function: {str(e)}")
+        st.error("An error occurred. Please try refreshing the page.")
 
-#### Noise Data (Red Heatmap)
-- The red heatmap shows aircraft noise levels
-- Color intensity indicates noise level:
-  - Light orange = lower noise
-  - Dark red = higher noise
-- The noise values are in decibels (dB)
-
-#### How to Use
-1. Use the slider above to select different months
-2. Toggle layers using the control in the top-right of the map
-3. Click on circles to see detailed information
-4. Use the layer control to show/hide patient or noise data
-""")
-
-# Add summary info
-st.subheader(f"Summary for {selected_date.strftime('%B %Y')}")
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Mean Noise (dB)", f"{filtered_noise['db_a'].mean():.1f}")
-with col2:
-    st.metric("Total Patients", f"{filtered_patients['patient_count'].sum()}")
-
-# Add station-wise breakdown
-st.subheader("Station-wise Breakdown")
-station_data = filtered_patients.merge(
-    filtered_noise[['station_name', 'db_a']],
-    on='station_name',
-    how='left'
-)
-station_data = station_data[['station_name', 'patient_count', 'db_a']].sort_values('patient_count', ascending=False)
-st.dataframe(station_data.style.format({'db_a': '{:.1f}'})) 
+if __name__ == '__main__':
+    main() 
